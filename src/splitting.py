@@ -65,12 +65,7 @@ def split_training_trials(df_train: pd.DataFrame, seed: int,
 
 
 def assign_test_trials(df_test: pd.DataFrame, tremor_frac: float = 1.00) -> pd.DataFrame:
-    """Choose which TEST trials also get a paired tremor-corrupted rendering.
-    Test participants are NEVER used for training. By default all test
-    trials are rendered both as TEST-A (clean) and TEST-B (tremor), so the
-    RF's clean-vs-tremor generalisation gap can be measured on identical
-    trials. Set tremor_frac < 1.0 to only corrupt a subset.
-    """
+    
     trials = _trial_table(df_test)
     n_select = int(round(len(trials) * tremor_frac))
     selected = trials.sample(n=n_select, random_state=0) if n_select < len(trials) else trials

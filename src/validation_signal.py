@@ -1,28 +1,4 @@
-"""
-PART 1 — MATHEMATICAL / SIGNAL VALIDATION
 
-Answers: "Did our code actually generate the tremor we intended?"
-
-Checks, per the validation roadmap:
-  1. Signed residual recovery (never magnitude-only for frequency work)
-  2. Frequency validation (injected vs. detected, via resampled PSD)
-  3. Amplitude validation (RMS / peak / percentiles, vs. configured A)
-  4. Frequency-amplitude relationship (does higher A -> higher RMS?)
-  5. Stochastic-envelope sanity check (Hilbert-envelope proxy — see caveat
-     in _envelope_stats)
-  6. Phase distribution across trials
-  7. Clean-trial preservation (observed == ground_truth exactly)
-  8. Event preservation (press/release/double_click untouched by tremor)
-
-Outputs (written by run_signal_validation):
-  trial_level_validation.csv   - one row per validated tremor trial
-  frequency_validation.csv     - aggregated by injected frequency
-  amplitude_validation.csv     - aggregated by configured amplitude
-  signal_validation_summary.csv - one-row overall summary
-  validation_plots/psd_<f>hz.png              (x4)
-  validation_plots/detected_vs_injected_freq.png
-  validation_plots/amplitude_vs_rms.png
-"""
 
 from pathlib import Path
 from typing import Dict, List, Optional

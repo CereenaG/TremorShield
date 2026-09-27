@@ -1,5 +1,4 @@
-"""load_data(): read all_cleaned_data.csv and validate its schema.
-"""
+
 
 import os
 import pandas as pd

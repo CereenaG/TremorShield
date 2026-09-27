@@ -1,21 +1,4 @@
-"""
-STATISTICAL COMPARISON
 
-Compares distributions (never just means) between our synthetic-tremor
-spatial features and RobustPDX PD / non-PD reference features, where a
-comparable feature exists in both (path length, deviation, x/y std,
-bbox area).
-
-If RobustPDX wasn't available (validation_robustpdx.run_robustpdx_validation
-returned None), this module still runs — it just reports that the
-between-dataset comparison was skipped, and writes an empty/annotated
-robustpdx_comparison.csv rather than failing.
-
-IMPORTANT: statistical significance alone is not evidence of similarity.
-Every comparison here reports both a distance/significance measure (KS
-statistic + p-value, Wasserstein distance) AND an effect size (Cohen's d),
-per the validation roadmap.
-"""
 
 from pathlib import Path
 from typing import Dict, Optional
