@@ -1,59 +1,359 @@
-"""
-diagnose_quality_flags.py — run this against train_combined.csv / test_combined.csv
-to see exactly WHY validate_dataset() flagged missing values and duplicate rows.
-
-Usage:
-    python diagnose_quality_flags.py data/final/train_combined.csv
-"""
-
-import sys
 import pandas as pd
+import numpy as np
 
-path = sys.argv[1] if len(sys.argv) > 1 else "data/final/train_combined.csv"
-df = pd.read_csv(path)
-print(f"Loaded {path}: {len(df):,} rows, {df.shape[1]} columns\n")
 
-# --- 1. Missing values, broken down by column -----------------------------
-print("=" * 70)
-print("1. MISSING VALUES BY COLUMN (only columns with >0 missing)")
-print("=" * 70)
-na = df.isna().sum()
-na = na[na > 0].sort_values(ascending=False)
-print(na.to_string())
-print(f"\nTotal missing across these columns: {na.sum():,}")
+TRAIN_PATH = "data/final/windows/train_windowed_events.csv"
+TEST_PATH = "data/final/windows/test_windowed_events.csv"
 
-# --- 2. Where those missing values live (event type / tremor_status) ------
-print("\n" + "=" * 70)
-print("2. WHICH ROWS ARE MISSING SOMETHING (by event, tremor_status)")
-print("=" * 70)
-if "event" in df.columns and "tremor_status" in df.columns:
-    missing_rows = df[df.isna().any(axis=1)]
-    print(missing_rows.groupby(["event", "tremor_status"]).size().to_string())
 
-# --- 2b. Is it just "first row of every trial"? ----------------------------
-if {"user_id", "session_id", "trial_id"}.issubset(df.columns):
-    first_rows = df.groupby(["user_id", "session_id", "trial_id"]).head(1)
-    first_row_idx = set(first_rows.index)
-    non_first_missing = df[df.isna().any(axis=1)].index.difference(first_row_idx)
-    print(f"\nRows missing something that are NOT a trial's first row: "
-          f"{len(non_first_missing):,}")
-    print("(if this is ~0, your missing values are just the expected "
-          "first-row-per-trial + clean-trial tremor-metadata pattern)")
+def analyze(path, name):
 
-# --- 3. Duplicate rows: what are they? -------------------------------------
-print("\n" + "=" * 70)
-print("3. DUPLICATE ROWS (same user_id/session_id/trial_id/elapsed_sec/tremor_status)")
-print("=" * 70)
-key = ["user_id", "session_id", "trial_id", "elapsed_sec", "tremor_status"]
-key = [k for k in key if k in df.columns]
-dup_mask = df.duplicated(subset=key, keep=False)
-dups = df[dup_mask].sort_values(key)
-print(f"Total duplicate rows: {dup_mask.sum():,}\n")
+    print()
+    print("=" * 75)
+    print(f"{name.upper()} TRIAL ANALYSIS")
+    print("=" * 75)
 
-if "event" in df.columns:
-    print("Duplicates by event type:")
-    print(dups["event"].value_counts().to_string())
+    df = pd.read_csv(
+        path,
+        low_memory=False,
+    )
 
-print("\nFirst 10 duplicate rows (to eyeball what's colliding):")
-show_cols = key + (["event"] if "event" in df.columns else [])
-print(dups[show_cols].head(10).to_string())
+    print(
+        f"Rows loaded: {len(df):,}"
+    )
+
+    # --------------------------------------------------------
+    # Use the actual column names from windowing.py
+    # --------------------------------------------------------
+
+    # window_task = original task name
+    # final_label = final context label
+
+    required = [
+        "participant_id",
+        "session_id",
+        "trial_id",
+        "window_task",
+        "final_label",
+        "event",
+        "button",
+    ]
+
+    missing = [
+        col
+        for col in required
+        if col not in df.columns
+    ]
+
+    if missing:
+        raise ValueError(
+            "Missing required columns: "
+            f"{missing}"
+        )
+
+    # --------------------------------------------------------
+    # Normalize event/button values
+    # --------------------------------------------------------
+
+    df["event_clean"] = (
+        df["event"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    df["button_clean"] = (
+        df["button"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    # --------------------------------------------------------
+    # Event indicators
+    # --------------------------------------------------------
+
+    df["is_move"] = (
+        df["event_clean"] == "move"
+    )
+
+    df["is_press"] = (
+        df["event_clean"] == "press"
+    )
+
+    df["is_release"] = (
+        df["event_clean"] == "release"
+    )
+
+    df["is_double_click"] = (
+        df["event_clean"]
+        == "double_click"
+    )
+
+    df["is_left_press"] = (
+        df["is_press"]
+        &
+        (
+            df["button_clean"]
+            == "left"
+        )
+    )
+
+    # --------------------------------------------------------
+    # TRIAL-LEVEL aggregation
+    # --------------------------------------------------------
+
+    trial = (
+        df.groupby(
+            [
+                "participant_id",
+                "session_id",
+                "trial_id",
+                "window_task",
+                "final_label",
+            ],
+            dropna=False,
+        )
+        .agg(
+            n_rows=(
+                "event_clean",
+                "size",
+            ),
+
+            move_events=(
+                "is_move",
+                "sum",
+            ),
+
+            press_events=(
+                "is_press",
+                "sum",
+            ),
+
+            release_events=(
+                "is_release",
+                "sum",
+            ),
+
+            double_click_events=(
+                "is_double_click",
+                "sum",
+            ),
+
+            left_press_events=(
+                "is_left_press",
+                "sum",
+            ),
+        )
+        .reset_index()
+    )
+
+    # --------------------------------------------------------
+    # Ratios
+    # --------------------------------------------------------
+
+    trial["move_ratio"] = (
+        trial["move_events"]
+        /
+        trial["n_rows"]
+    )
+
+    trial["press_ratio"] = (
+        trial["press_events"]
+        /
+        trial["n_rows"]
+    )
+
+    # --------------------------------------------------------
+    # Summary by final label
+    # --------------------------------------------------------
+
+    summary = (
+        trial
+        .groupby(
+            "final_label"
+        )[
+            [
+                "n_rows",
+                "move_events",
+                "press_events",
+                "release_events",
+                "double_click_events",
+                "left_press_events",
+                "move_ratio",
+                "press_ratio",
+            ]
+        ]
+        .agg(
+            [
+                "mean",
+                "median",
+            ]
+        )
+    )
+
+    print()
+    print("=" * 75)
+    print("TRIAL-LEVEL SUMMARY")
+    print("=" * 75)
+
+    print(
+        summary.to_string()
+    )
+
+    # --------------------------------------------------------
+    # Percentage of trials containing events
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 75)
+    print(
+        "PERCENTAGE OF TRIALS "
+        "CONTAINING EVENT TYPES"
+    )
+    print("=" * 75)
+
+    for label in [
+        "clicking",
+        "precision",
+        "dragging",
+        "target_selection",
+        "navigation",
+        "idle",
+    ]:
+
+        subset = trial[
+            trial["final_label"]
+            == label
+        ]
+
+        if len(subset) == 0:
+            continue
+
+        print()
+        print(
+            label.upper()
+        )
+
+        print(
+            "Trials:",
+            len(subset),
+        )
+
+        print(
+            "With movement:",
+            f"{100 * (subset['move_events'] > 0).mean():.2f}%"
+        )
+
+        print(
+            "With button press:",
+            f"{100 * (subset['press_events'] > 0).mean():.2f}%"
+        )
+
+        print(
+            "With double click:",
+            f"{100 * (subset['double_click_events'] > 0).mean():.2f}%"
+        )
+
+    # --------------------------------------------------------
+    # Clicking vs precision
+    # --------------------------------------------------------
+
+    cp = trial[
+        trial["final_label"].isin(
+            [
+                "clicking",
+                "precision",
+            ]
+        )
+    ].copy()
+
+    print()
+    print("=" * 75)
+    print(
+        "CLICKING VS PRECISION "
+        "— TRIAL LEVEL"
+    )
+    print("=" * 75)
+
+    if len(cp) > 0:
+
+        print(
+            cp.groupby(
+                "final_label"
+            )[
+                [
+                    "n_rows",
+                    "move_events",
+                    "press_events",
+                    "release_events",
+                    "double_click_events",
+                    "move_ratio",
+                    "press_ratio",
+                ]
+            ]
+            .mean()
+            .T
+            .to_string()
+        )
+
+    # --------------------------------------------------------
+    # Original task vs final label
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 75)
+    print(
+        "ORIGINAL TASK -> FINAL LABEL"
+    )
+    print("=" * 75)
+
+    task_label_counts = (
+        trial.groupby(
+            [
+                "window_task",
+                "final_label",
+            ]
+        )
+        .size()
+    )
+
+    print(
+        task_label_counts.to_string()
+    )
+
+    # --------------------------------------------------------
+    # Save
+    # --------------------------------------------------------
+
+    output = (
+        "data/final/"
+        f"{name.lower()}_trial_context.csv"
+    )
+
+    trial.to_csv(
+        output,
+        index=False,
+    )
+
+    print()
+    print(
+        f"Saved: {output}"
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+analyze(
+    TRAIN_PATH,
+    "TRAIN",
+)
+
+analyze(
+    TEST_PATH,
+    "TEST",
+)

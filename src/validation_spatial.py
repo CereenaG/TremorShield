@@ -1,19 +1,4 @@
-"""
-PART 2 — SPATIAL VALIDATION (own-data half)
 
-Answers: "Does synthetic tremor produce trajectory deviations, and how big
-are they?" using PAIRED clean-vs-tremor comparison within the same trial
-(same participant, same task, same movement — only the presence of tremor
-differs), which removes participant/task variability from the comparison.
-
-This module computes per-trial spatial features from ground_truth_x/y vs.
-observed_x/y. The RobustPDX side of "spatial validation" (external
-reference data) lives in validation_robustpdx.py; the two are combined by
-validation_statistics.py.
-
-Output: spatial_validation.csv (one row per tremor trial) plus grouped
-boxplots into validation_plots/.
-"""
 
 from pathlib import Path
 from typing import Dict

@@ -1,8 +1,4 @@
-"""
-Generates validation_report.md — the human-readable summary of everything
-the other validation modules computed. Pulls only from the values it's
-given (never re-derives numbers), so the report always matches the CSVs.
-"""
+
 
 from pathlib import Path
 from typing import Dict, Optional

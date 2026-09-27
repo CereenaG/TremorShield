@@ -1,9 +1,4 @@
-"""
-Constants and run configuration for the TREMORSHIELD tremor-injection
-pipeline.
 
-
-"""
 
 from dataclasses import dataclass #to create configuration objects
 from typing import Tuple

@@ -1,6 +1,4 @@
-"""recalculate_features(): derive motion features from OBSERVED coordinates.
 
-"""
 
 import numpy as np
 import pandas as pd

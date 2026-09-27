@@ -1,53 +1,4 @@
-"""
-TREMORSHIELD
-Windowing + Feature Extraction + Final ML Dataset Creation
 
-Pipeline
---------
-train_combined.csv / test_combined.csv
-        |
-        v
-trial-safe overlapping windows
-        |
-        v
-window-level feature extraction
-        |
-        v
-5-class context labels
-        |
-        v
-ML-ready CSV
-
-Final context labels
---------------------
-navigation
-clicking
-dragging
-precision
-target_selection
-
-Original task mapping
----------------------
-normal          -> navigation
-fast            -> navigation
-slow            -> navigation
-
-click           -> clicking
-double_click    -> clicking
-
-drag            -> dragging
-
-precision       -> precision
-
-target_selection -> target_selection
-
-idle            -> excluded from ML dataset
-
-IMPORTANT
----------
-Ground-truth trajectory and synthetic tremor metadata are NOT
-used as ML input features.
-"""
 
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -56,9 +7,8 @@ import numpy as np
 import pandas as pd
 
 
-# ============================================================
 # CONFIGURATION
-# ============================================================
+
 
 WINDOW_SIZE_SEC = 0.500
 STRIDE_SEC = 0.100
@@ -73,9 +23,7 @@ TRIAL_KEYS = [
 ]
 
 
-# ============================================================
 # FINAL LABEL MAPPING
-# ============================================================
 
 TASK_TO_FINAL_LABEL = {
     # Navigation
@@ -87,14 +35,11 @@ TASK_TO_FINAL_LABEL = {
     "click": "clicking",
     "double_click": "clicking",
 
-    # Dragging
     "drag": "dragging",
 
-    # Precision interaction
-    "precision": "precision",
+    "precision": "target_selection",
 
-    # Target selection
-    "target_selection": "precision",
+    "target_selection": "target_selection",
 
     "idle": "idle",
 }
@@ -110,9 +55,7 @@ FINAL_LABELS = [
 ]
 
 
-# ============================================================
 # REQUIRED SOURCE COLUMNS
-# ============================================================
 
 REQUIRED_COLUMNS = [
     "participant_id",
@@ -124,9 +67,7 @@ REQUIRED_COLUMNS = [
 ]
 
 
-# ============================================================
 # OBSERVED FEATURE COLUMNS
-# ============================================================
 
 OBSERVED_KINEMATIC_COLUMNS = [
     "dx_observed",
@@ -139,9 +80,7 @@ OBSERVED_KINEMATIC_COLUMNS = [
 ]
 
 
-# ============================================================
 # TIMESTAMP HANDLING
-# ============================================================
 
 def add_elapsed_seconds(trial_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -200,9 +139,7 @@ def add_elapsed_seconds(trial_df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ============================================================
 # SAFE NUMERIC HELPERS
-# ============================================================
 
 def numeric_array(
     df: pd.DataFrame,
@@ -258,9 +195,7 @@ def safe_max(values):
     return float(np.max(values))
 
 
-# ============================================================
 # WINDOW CREATION
-# ============================================================
 
 def create_trial_windows(
     trial_df: pd.DataFrame,
@@ -386,9 +321,7 @@ def create_trial_windows(
     )
 
 
-# ============================================================
 # FEATURE EXTRACTION
-# ============================================================
 
 def extract_window_features(
     window: pd.DataFrame,
@@ -396,9 +329,7 @@ def extract_window_features(
 
     features = {}
 
-    # --------------------------------------------------------
     # Basic temporal information
-    # --------------------------------------------------------
 
     elapsed = pd.to_numeric(
         window["elapsed_sec"],
@@ -428,9 +359,7 @@ def extract_window_features(
         "n_events"
     ] = int(len(window))
 
-    # --------------------------------------------------------
     # Event statistics
-    # --------------------------------------------------------
 
     if "event" in window.columns:
 
@@ -485,9 +414,7 @@ def extract_window_features(
             "n_double_click_events"
         ] = 0
 
-    # --------------------------------------------------------
     # Velocity
-    # --------------------------------------------------------
 
     velocity = numeric_array(
         window,
@@ -524,9 +451,7 @@ def extract_window_features(
         "velocity_max"
     ] = safe_max(velocity)
 
-    # --------------------------------------------------------
     # Velocity X/Y
-    # --------------------------------------------------------
 
     vx = numeric_array(
         window,
@@ -554,9 +479,7 @@ def extract_window_features(
         "vy_std"
     ] = safe_std(vy)
 
-    # --------------------------------------------------------
     # Displacement increments
-    # --------------------------------------------------------
 
     dx = numeric_array(
         window,
@@ -584,9 +507,7 @@ def extract_window_features(
         "dy_std"
     ] = safe_std(dy)
 
-    # --------------------------------------------------------
     # Acceleration
-    # --------------------------------------------------------
 
     acceleration = numeric_array(
         window,
@@ -616,9 +537,8 @@ def extract_window_features(
         "acceleration_max"
     ] = safe_max(acceleration)
 
-    # --------------------------------------------------------
     # Direction changes
-    # --------------------------------------------------------
+    
 
     direction_change = numeric_array(
         window,
@@ -646,9 +566,7 @@ def extract_window_features(
         90,
     )
 
-    # --------------------------------------------------------
     # Path length
-    # --------------------------------------------------------
 
     if (
         len(dx) > 0
@@ -677,9 +595,7 @@ def extract_window_features(
         "path_length"
     ] = path_length
 
-    # --------------------------------------------------------
     # Net displacement
-    # --------------------------------------------------------
 
     if (
         len(dx) > 0
@@ -709,12 +625,10 @@ def extract_window_features(
         "net_displacement"
     ] = net_displacement
 
-    # --------------------------------------------------------
     # Path straightness
     #
     # 1 = approximately straight
     # smaller = more curved/irregular
-    # --------------------------------------------------------
 
     if (
         np.isfinite(path_length)
@@ -735,16 +649,11 @@ def extract_window_features(
             "path_straightness"
         ] = np.nan
 
-    # --------------------------------------------------------
     # Pause ratio
-    # --------------------------------------------------------
 
     if len(velocity) > 0:
 
-        # Small velocity threshold.
-        #
-        # This is intentionally relative rather than a
-        # clinical tremor threshold.
+        
         positive_velocity = velocity[
             velocity > 0
         ]
@@ -777,11 +686,8 @@ def extract_window_features(
         "pause_ratio"
     ] = pause_ratio
 
-    # --------------------------------------------------------
     # Coordinate spread
     #
-    # These are observed cursor coordinates.
-    # --------------------------------------------------------
 
     x = numeric_array(
         window,
@@ -834,9 +740,7 @@ def extract_window_features(
     return features
 
 
-# ============================================================
 # PROCESS ONE DATASET
-# ============================================================
 
 def process_dataset(
     input_csv: str,
@@ -867,9 +771,7 @@ def process_dataset(
         f"Rows loaded: {len(df):,}"
     )
 
-    # --------------------------------------------------------
     # Required columns
-    # --------------------------------------------------------
 
     missing = [
         col
@@ -883,9 +785,7 @@ def process_dataset(
             f"{missing}"
         )
 
-    # --------------------------------------------------------
     # Check tasks
-    # --------------------------------------------------------
 
     tasks = (
         df["task"]
@@ -913,9 +813,7 @@ def process_dataset(
             f"{unknown_tasks}"
         )
 
-    # --------------------------------------------------------
     # Deterministic ordering
-    # --------------------------------------------------------
 
     df = df.sort_values(
         TRIAL_KEYS + ["timestamp"],
@@ -924,9 +822,8 @@ def process_dataset(
         drop=True
     )
 
-    # --------------------------------------------------------
     # Window storage
-    # --------------------------------------------------------
+    
 
     ml_rows = []
     event_window_rows = []
@@ -944,9 +841,7 @@ def process_dataset(
         dropna=False,
     )
 
-    # ========================================================
     # TRIAL LOOP
-    # ========================================================
 
     for trial_key, trial_df in grouped:
 
@@ -999,9 +894,7 @@ def process_dataset(
             ].iloc[0]
         )
 
-        # ----------------------------------------------------
         # Tremor status
-        # ----------------------------------------------------
 
         if "tremor_status" in trial_df.columns:
 
@@ -1026,9 +919,7 @@ def process_dataset(
 
             tremor_status = np.nan
 
-        # ----------------------------------------------------
         # Window loop
-        # ----------------------------------------------------
 
         for local_idx, (
             window,
@@ -1050,9 +941,7 @@ def process_dataset(
 
             total_windows += 1
 
-            # ------------------------------------------------
             # Event-level window data
-            # ------------------------------------------------
 
             event_window = (
                 window.copy()
@@ -1106,16 +995,11 @@ def process_dataset(
                 event_window
             )
 
-            # ------------------------------------------------
-            # Idle is retained in event-level data but
-            # excluded from the five-class ML dataset.
-            # ------------------------------------------------
+            
 
             
 
-            # ------------------------------------------------
-            # Extract ML features
-            # ------------------------------------------------
+          
 
             features = (
                 extract_window_features(
@@ -1123,9 +1007,7 @@ def process_dataset(
                 )
             )
 
-            # ------------------------------------------------
-            # Window metadata
-            # ------------------------------------------------
+           
 
             row = {
                 "window_id": window_id,
@@ -1225,9 +1107,7 @@ def process_dataset(
                 }
             )
 
-    # ========================================================
     # CREATE DATAFRAMES
-    # ========================================================
 
     if not ml_rows:
 
@@ -1249,9 +1129,7 @@ def process_dataset(
         window_index_rows
     )
 
-    # ========================================================
     # SAVE COMPLETE EVENT-LEVEL WINDOWS
-    # ========================================================
 
     event_path = (
         output_path
@@ -1263,9 +1141,7 @@ def process_dataset(
         index=False,
     )
 
-    # ========================================================
     # SAVE ML DATASET
-    # ========================================================
 
     ml_path = (
         output_path
@@ -1277,9 +1153,7 @@ def process_dataset(
         index=False,
     )
 
-    # ========================================================
     # SAVE WINDOW INDEX
-    # ========================================================
 
     index_path = (
         output_path
@@ -1291,9 +1165,7 @@ def process_dataset(
         index=False,
     )
 
-    # ========================================================
     # TREMOR / CLEAN ML DATASETS
-    # ========================================================
 
     tremor_ml = ml_df[
         ml_df[
@@ -1327,9 +1199,7 @@ def process_dataset(
         index=False,
     )
 
-    # ========================================================
     # PRINT SUMMARY
-    # ========================================================
 
     print()
     print("WINDOWING + FEATURE SUMMARY")
@@ -1403,9 +1273,7 @@ def process_dataset(
     print("=" * 75)
 
 
-# ============================================================
 # MAIN
-# ============================================================
 
 def main():
 
@@ -1488,9 +1356,7 @@ def main():
         args.min_duration_ms / 1000.0
     )
 
-    # --------------------------------------------------------
-    # TRAIN
-    # --------------------------------------------------------
+   
 
     process_dataset(
         input_csv=args.train,
@@ -1498,9 +1364,7 @@ def main():
         split_name="train",
     )
 
-    # --------------------------------------------------------
-    # TEST
-    # --------------------------------------------------------
+ 
 
     process_dataset(
         input_csv=args.test,
@@ -1519,3 +1383,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
