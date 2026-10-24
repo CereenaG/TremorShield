@@ -1,0 +1,11 @@
+Performance Indicator,Score
+Accuracy,0.7650683002394029
+Balanced Accuracy,0.73036216062619
+Macro Precision,0.7801325016651078
+Macro Recall,0.73036216062619
+Macro F1-Score,0.7304849210645625
+Weighted Precision,0.7633701001835578
+Weighted Recall,0.7650683002394029
+Weighted F1-Score,0.7441154798441562
+Matthews Correlation Coefficient,0.6871504165508642
+Cohen's Kappa,0.6774103491550412
